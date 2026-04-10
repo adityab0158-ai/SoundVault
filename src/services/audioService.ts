@@ -2,7 +2,7 @@ import type { Track, PlaybackSpeed } from '../types';
 
 class AudioService {
   private audio: HTMLAudioElement;
-  private currentBlobUrl: string | null = null;
+  private currentUrl: string | null = null;
 
   constructor() {
     this.audio = new Audio();
@@ -23,7 +23,8 @@ class AudioService {
       this.onEnded?.();
     });
 
-    this.audio.addEventListener('error', () => {
+    this.audio.addEventListener('error', (e) => {
+      console.error('Audio error:', e);
       this.onError?.();
     });
 
@@ -34,20 +35,30 @@ class AudioService {
     this.audio.addEventListener('pause', () => {
       this.onPlayStateChange?.(false);
     });
+
+    this.audio.addEventListener('canplay', () => {
+      this.onCanPlay?.();
+    });
   }
 
   onTimeUpdate?: () => void;
   onEnded?: () => void;
   onError?: () => void;
   onPlayStateChange?: (isPlaying: boolean) => void;
+  onCanPlay?: () => void;
 
   async loadTrack(track: Track): Promise<void> {
-    if (this.currentBlobUrl) {
-      URL.revokeObjectURL(this.currentBlobUrl);
+    const url = track.publicUrl || track.storagePath;
+    if (!url) {
+      console.error('No URL available for track');
+      throw new Error('No audio URL available');
     }
-    this.currentBlobUrl = URL.createObjectURL(track.fileBlob);
-    this.audio.src = this.currentBlobUrl;
-    this.audio.load();
+
+    if (this.currentUrl !== url) {
+      this.currentUrl = url;
+      this.audio.src = url;
+      this.audio.load();
+    }
   }
 
   play(): Promise<void> {
@@ -96,12 +107,14 @@ class AudioService {
     return this.audio.muted;
   }
 
+  get readyState(): number {
+    return this.audio.readyState;
+  }
+
   destroy(): void {
-    if (this.currentBlobUrl) {
-      URL.revokeObjectURL(this.currentBlobUrl);
-    }
     this.audio.pause();
     this.audio.src = '';
+    this.currentUrl = null;
   }
 }
 

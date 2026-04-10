@@ -1,7 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
 import { Plus, Grid, List, ArrowUpDown, Upload } from 'lucide-react';
 import { useStore } from '../../stores/appStore';
-import { createTrack } from '../../services/metadataService';
 import { TrackCard } from './TrackCard';
 import { TrackRow } from './TrackRow';
 import type { SortOption, Track } from '../../types';
@@ -77,8 +76,7 @@ export function LibraryView() {
     
     for (const file of audioFiles) {
       try {
-        const track = await createTrack(file);
-        await addTrack(track);
+        await addTrack(file);
       } catch (error) {
         console.error('Failed to add track:', file.name, error);
       }

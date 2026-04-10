@@ -4,7 +4,8 @@ import type { Track } from '../types';
 
 export async function extractMetadata(file: File): Promise<Partial<Track>> {
   try {
-    const metadata = await parseFile(file as unknown as string);
+    const arrayBuffer = await file.arrayBuffer();
+    const metadata = await parseFile(arrayBuffer as any);
     
     let artwork: string | null = null;
     if (metadata.common.picture && metadata.common.picture.length > 0) {
@@ -44,6 +45,9 @@ export async function createTrack(file: File): Promise<Track> {
     artwork: metadata.artwork ?? null,
     fileBlob: file,
     fileName: file.name,
+    fileSize: file.size,
+    storagePath: undefined,
+    publicUrl: undefined,
     dateAdded: Date.now(),
     playCount: 0,
     isFavorite: false,

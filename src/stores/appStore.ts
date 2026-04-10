@@ -7,15 +7,22 @@ import type {
   ViewSection,
   RepeatMode,
   PlaybackSpeed,
-  Toast
+  Toast,
+  User
 } from '../types';
-import * as storage from '../services/storageService';
+import * as storage from '../services/supabaseService';
 import { audioService } from '../services/audioService';
 
 interface AppState {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  isInitialized: boolean;
+  
   tracks: Track[];
   playlists: Playlist[];
   recentlyPlayed: RecentlyPlayed[];
+  favorites: Set<string>;
   preferences: Preferences;
   
   currentView: ViewSection;
@@ -35,15 +42,17 @@ interface AppState {
   playbackSpeed: PlaybackSpeed;
   
   toasts: Toast[];
-  isLoading: boolean;
   
   initialize: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string) => Promise<{ error: any }>;
+  signOut: () => Promise<void>;
   
   setCurrentView: (view: ViewSection) => void;
   setSelectedPlaylistId: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
   
-  addTrack: (track: Track) => Promise<void>;
+  addTrack: (file: File, onProgress?: (p: number) => void) => Promise<void>;
   deleteTrack: (id: string) => Promise<void>;
   updateTrackMetadata: (id: string, metadata: { title?: string; artist?: string; album?: string }) => Promise<void>;
   toggleFavorite: (id: string) => Promise<void>;
@@ -75,12 +84,20 @@ interface AppState {
   
   addToast: (type: Toast['type'], message: string) => void;
   removeToast: (id: string) => void;
+  
+  loadUserData: () => Promise<void>;
 }
 
 export const useStore = create<AppState>((set, get) => ({
+  user: null,
+  isAuthenticated: false,
+  isLoading: false,
+  isInitialized: false,
+  
   tracks: [],
   playlists: [],
   recentlyPlayed: [],
+  favorites: new Set<string>(),
   preferences: {
     theme: 'dark',
     sortBy: 'dateAdded',
@@ -105,53 +122,156 @@ export const useStore = create<AppState>((set, get) => ({
   playbackSpeed: 1,
   
   toasts: [],
-  isLoading: true,
   
   initialize: async () => {
     try {
-      const [tracks, playlists, recentlyPlayed, preferences] = await Promise.all([
-        storage.getAllTracks(),
-        storage.getAllPlaylists(),
-        storage.getRecentlyPlayed(),
-        storage.getPreferences(),
-      ]);
+      const user = await storage.getCurrentUser();
       
-      set({
-        tracks,
-        playlists,
-        recentlyPlayed,
-        preferences,
-        isLoading: false,
+      if (user) {
+        set({ user, isAuthenticated: true });
+        await get().loadUserData();
+      }
+      
+      storage.onAuthStateChange(async (authUser) => {
+        if (authUser) {
+          set({ user: authUser, isAuthenticated: true });
+          await get().loadUserData();
+        } else {
+          set({ 
+            user: null, 
+            isAuthenticated: false,
+            tracks: [],
+            playlists: [],
+            recentlyPlayed: [],
+            favorites: new Set(),
+            currentTrack: null,
+            queue: [],
+          });
+        }
       });
       
-      audioService.setVolume(get().volume);
-      audioService.setPlaybackSpeed(get().playbackSpeed);
-      
-      applyTheme(preferences.theme);
+      set({ isInitialized: true });
     } catch (error) {
       console.error('Failed to initialize:', error);
-      set({ isLoading: false });
+      set({ isInitialized: true });
     }
+  },
+  
+  signIn: async (email, password) => {
+    set({ isLoading: true });
+    const { error } = await storage.signIn(email, password);
+    set({ isLoading: false });
+    return { error };
+  },
+  
+  signUp: async (email, password) => {
+    set({ isLoading: true });
+    const { error } = await storage.signUp(email, password);
+    set({ isLoading: false });
+    return { error };
+  },
+  
+  signOut: async () => {
+    audioService.destroy();
+    await storage.signOut();
+    set({
+      user: null,
+      isAuthenticated: false,
+      tracks: [],
+      playlists: [],
+      recentlyPlayed: [],
+      favorites: new Set(),
+      currentTrack: null,
+      queue: [],
+      queueIndex: -1,
+      isPlaying: false,
+    });
+  },
+  
+  loadUserData: async () => {
+    const [tracks, playlists, recentlyPlayed, favoritesData, preferences] = await Promise.all([
+      storage.getTracks(),
+      storage.getPlaylists(),
+      storage.getRecentlyPlayed(),
+      storage.getFavorites(),
+      storage.getPreferences(),
+    ]);
+    
+    const favorites = new Set(favoritesData);
+    
+    const tracksWithFavorites = tracks.map(t => ({
+      ...t,
+      isFavorite: favorites.has(t.id),
+    }));
+    
+    set({
+      tracks: tracksWithFavorites,
+      playlists,
+      recentlyPlayed,
+      favorites,
+      preferences,
+    });
+    
+    applyTheme(preferences.theme);
   },
   
   setCurrentView: (view) => set({ currentView: view }),
   setSelectedPlaylistId: (id) => set({ selectedPlaylistId: id, currentView: id ? 'playlist-detail' : 'playlists' }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   
-  addTrack: async (track) => {
-    await storage.saveTrack(track);
-    set((state) => ({ tracks: [...state.tracks, track] }));
-    get().addToast('success', `Added "${track.title}" to library`);
+  addTrack: async (file, onProgress) => {
+    const track = await createLocalTrack(file);
+    
+    const user = get().user;
+    if (!user) {
+      get().addToast('error', 'Please sign in to upload tracks');
+      return;
+    }
+    
+    set({ isLoading: true });
+    
+    try {
+      const uploadResult = await storage.uploadAudioFile(user.id, file, onProgress);
+      
+      if (!uploadResult) {
+        get().addToast('error', 'Failed to upload file');
+        set({ isLoading: false });
+        return;
+      }
+      
+      const trackToSave: Track = {
+        ...track,
+        storagePath: uploadResult.path,
+        publicUrl: uploadResult.url,
+        fileBlob: null,
+      };
+      
+      await storage.saveTrack(trackToSave, uploadResult.path);
+      
+      set((state) => ({
+        tracks: [trackToSave, ...state.tracks],
+        isLoading: false,
+      }));
+      
+      get().addToast('success', `Added "${track.title}" to library`);
+    } catch (error) {
+      console.error('Failed to add track:', error);
+      get().addToast('error', 'Failed to add track');
+      set({ isLoading: false });
+    }
   },
   
   deleteTrack: async (id) => {
     const track = get().tracks.find(t => t.id === id);
-    await storage.deleteTrack(id);
+    
+    await storage.deleteTrack(id, track?.storagePath);
+    
     set((state) => ({
       tracks: state.tracks.filter(t => t.id !== id),
       queue: state.queue.filter(t => t.id !== id),
       currentTrack: state.currentTrack?.id === id ? null : state.currentTrack,
     }));
+    
     if (track) {
       get().addToast('info', `Removed "${track.title}" from library`);
     }
@@ -168,16 +288,29 @@ export const useStore = create<AppState>((set, get) => ({
   
   toggleFavorite: async (id) => {
     const track = get().tracks.find(t => t.id === id);
-    if (track) {
-      const newValue = !track.isFavorite;
-      await storage.updateTrackFavorite(id, newValue);
-      set((state) => ({
+    if (!track) return;
+    
+    const newValue = !track.isFavorite;
+    
+    await storage.updateTrackFavorite(id, newValue);
+    
+    set((state) => {
+      const newFavorites = new Set(state.favorites);
+      if (newValue) {
+        newFavorites.add(id);
+      } else {
+        newFavorites.delete(id);
+      }
+      
+      return {
+        favorites: newFavorites,
         tracks: state.tracks.map(t => 
           t.id === id ? { ...t, isFavorite: newValue } : t
         ),
-      }));
-      get().addToast('success', newValue ? `Added to favorites` : `Removed from favorites`);
-    }
+      };
+    });
+    
+    get().addToast('success', newValue ? 'Added to favorites' : 'Removed from favorites');
   },
   
   createPlaylist: async (name, description = '') => {
@@ -189,8 +322,13 @@ export const useStore = create<AppState>((set, get) => ({
       dateCreated: Date.now(),
       dateModified: Date.now(),
     };
+    
     await storage.savePlaylist(playlist);
-    set((state) => ({ playlists: [...state.playlists, playlist] }));
+    
+    set((state) => ({
+      playlists: [playlist, ...state.playlists],
+    }));
+    
     get().addToast('success', `Created playlist "${name}"`);
   },
   
@@ -218,42 +356,41 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
   addToPlaylist: async (playlistId, trackId) => {
-    const playlist = get().playlists.find(p => p.id === playlistId);
-    if (playlist && !playlist.trackIds.includes(trackId)) {
-      const updated = {
-        ...playlist,
-        trackIds: [...playlist.trackIds, trackId],
-        dateModified: Date.now(),
-      };
-      await storage.savePlaylist(updated);
-      set((state) => ({
-        playlists: state.playlists.map(p => p.id === playlistId ? updated : p),
-      }));
-      get().addToast('success', `Added to playlist`);
-    }
+    await storage.addToPlaylist(playlistId, trackId);
+    
+    set((state) => ({
+      playlists: state.playlists.map(p => 
+        p.id === playlistId && !p.trackIds.includes(trackId)
+          ? { ...p, trackIds: [...p.trackIds, trackId], dateModified: Date.now() }
+          : p
+      ),
+    }));
+    
+    get().addToast('success', 'Added to playlist');
   },
   
   removeFromPlaylist: async (playlistId, trackId) => {
-    const playlist = get().playlists.find(p => p.id === playlistId);
-    if (playlist) {
-      const updated = {
-        ...playlist,
-        trackIds: playlist.trackIds.filter(id => id !== trackId),
-        dateModified: Date.now(),
-      };
-      await storage.savePlaylist(updated);
-      set((state) => ({
-        playlists: state.playlists.map(p => p.id === playlistId ? updated : p),
-      }));
-    }
+    await storage.removeFromPlaylist(playlistId, trackId);
+    
+    set((state) => ({
+      playlists: state.playlists.map(p => 
+        p.id === playlistId
+          ? { ...p, trackIds: p.trackIds.filter(id => id !== trackId), dateModified: Date.now() }
+          : p
+      ),
+    }));
   },
   
   playTrack: async (track) => {
     try {
+      if (!track.publicUrl && !track.storagePath) {
+        get().addToast('error', 'Track not available. Please re-upload.');
+        return;
+      }
+      
       await audioService.loadTrack(track);
       audioService.play();
       
-      await storage.incrementPlayCount(track.id);
       await storage.addToRecentlyPlayed(track.id);
       
       set({
@@ -277,11 +414,15 @@ export const useStore = create<AppState>((set, get) => ({
     if (tracks.length === 0) return;
     
     const track = tracks[startIndex];
+    if (!track.publicUrl && !track.storagePath) {
+      get().addToast('error', 'Track not available. Please re-upload.');
+      return;
+    }
+    
     try {
       await audioService.loadTrack(track);
       audioService.play();
       
-      await storage.incrementPlayCount(track.id);
       await storage.addToRecentlyPlayed(track.id);
       
       set({
@@ -429,6 +570,50 @@ function applyTheme(theme: 'light' | 'dark'): void {
   } else {
     document.documentElement.classList.remove('dark');
   }
+}
+
+async function createLocalTrack(file: File): Promise<Track> {
+  const { v4: uuidv4 } = await import('uuid');
+  
+  let artwork: string | null = null;
+  let duration = 0;
+  let title = file.name.replace(/\.[^/.]+$/, '');
+  let artist = 'Unknown Artist';
+  let album = 'Unknown Album';
+  
+  try {
+    const { parseFile } = await import('music-metadata');
+    const arrayBuffer = await file.arrayBuffer();
+    const metadata = await parseFile(arrayBuffer as any);
+    
+    title = metadata.common.title || title;
+    artist = metadata.common.artist || artist;
+    album = metadata.common.album || album;
+    duration = metadata.format.duration || 0;
+    
+    if (metadata.common.picture && metadata.common.picture.length > 0) {
+      const pic = metadata.common.picture[0];
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(pic.data)));
+      artwork = `data:${pic.format};base64,${base64}`;
+    }
+  } catch (error) {
+    console.warn('Failed to extract metadata:', error);
+  }
+  
+  return {
+    id: uuidv4(),
+    title,
+    artist,
+    album,
+    duration,
+    artwork,
+    fileBlob: file,
+    fileName: file.name,
+    fileSize: file.size,
+    dateAdded: Date.now(),
+    playCount: 0,
+    isFavorite: false,
+  };
 }
 
 audioService.onTimeUpdate = () => {

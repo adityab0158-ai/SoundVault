@@ -5,8 +5,11 @@ export interface Track {
   album: string;
   duration: number;
   artwork: string | null;
-  fileBlob: Blob;
+  fileBlob: Blob | null;
   fileName: string;
+  fileSize?: number;
+  storagePath?: string;
+  publicUrl?: string | null;
   dateAdded: number;
   playCount: number;
   isFavorite: boolean;
@@ -57,4 +60,9 @@ export interface Toast {
   id: string;
   type: 'success' | 'error' | 'info';
   message: string;
+}
+
+export interface User {
+  id: string;
+  email?: string;
 }

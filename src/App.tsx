@@ -12,10 +12,11 @@ import { PlaylistDetailView } from './components/playlist/PlaylistDetailView';
 import { CreatePlaylistModal } from './components/playlist/CreatePlaylistModal';
 import { SettingsView } from './components/layout/SettingsView';
 import { ToastContainer } from './components/common/Toast';
+import { AuthView } from './components/common/Auth';
 import styles from './App.module.css';
 
 function App() {
-  const { initialize, isLoading, currentView, currentTrack } = useStore();
+  const { initialize, isInitialized, isAuthenticated, currentView, currentTrack } = useStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [fullPlayerOpen, setFullPlayerOpen] = useState(false);
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
@@ -24,12 +25,21 @@ function App() {
     initialize();
   }, [initialize]);
   
-  if (isLoading) {
+  if (!isInitialized) {
     return (
       <div className={styles.loading}>
         <div className={styles.spinner} />
-        <p>Loading your library...</p>
+        <p>Initializing...</p>
       </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return (
+      <>
+        <AuthView />
+        <ToastContainer />
+      </>
     );
   }
   

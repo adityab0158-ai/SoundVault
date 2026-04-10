@@ -1,9 +1,9 @@
-import { Sun, Moon, Info } from 'lucide-react';
+import { Sun, Moon, Info, LogOut, User } from 'lucide-react';
 import { useStore } from '../../stores/appStore';
 import styles from './SettingsView.module.css';
 
 export function SettingsView() {
-  const { preferences, setTheme, tracks } = useStore();
+  const { preferences, setTheme, tracks, user, signOut } = useStore();
   
   const totalDuration = tracks.reduce((sum, t) => sum + t.duration, 0);
   const formatTotalDuration = () => {
@@ -15,9 +15,35 @@ export function SettingsView() {
     return `${minutes} minutes`;
   };
   
+  const handleSignOut = async () => {
+    if (confirm('Are you sure you want to sign out?')) {
+      await signOut();
+    }
+  };
+  
   return (
     <div className={styles.view}>
       <h1 className={styles.title}>Settings</h1>
+      
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>Account</h2>
+        
+        <div className={styles.accountCard}>
+          <div className={styles.accountInfo}>
+            <div className={styles.avatar}>
+              <User size={24} />
+            </div>
+            <div>
+              <span className={styles.accountEmail}>{user?.email || 'Not signed in'}</span>
+              <span className={styles.accountLabel}>Signed in</span>
+            </div>
+          </div>
+          <button className={styles.signOutBtn} onClick={handleSignOut}>
+            <LogOut size={18} />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </div>
       
       <div className={styles.section}>
         <h2 className={styles.sectionTitle}>Appearance</h2>
@@ -84,19 +110,19 @@ export function SettingsView() {
             </div>
             <div>
               <h3 className={styles.appName}>SoundVault</h3>
-              <span className={styles.appVersion}>Version 1.0.0</span>
+              <span className={styles.appVersion}>Version 2.0.0</span>
             </div>
           </div>
           
           <p className={styles.aboutText}>
             A premium personal audio player for your own music library. 
-            Upload, organize, and enjoy your music offline with a beautiful interface.
+            Upload, organize, and enjoy your music across all your devices.
           </p>
           
           <div className={styles.featureList}>
             <div className={styles.feature}>
               <Info size={16} />
-              <span>Your music is stored locally on your device</span>
+              <span>Your music syncs across all devices</span>
             </div>
             <div className={styles.feature}>
               <Info size={16} />
@@ -104,7 +130,7 @@ export function SettingsView() {
             </div>
             <div className={styles.feature}>
               <Info size={16} />
-              <span>Lyrics powered by LRCLIB</span>
+              <span>Secure cloud storage with Supabase</span>
             </div>
           </div>
         </div>
