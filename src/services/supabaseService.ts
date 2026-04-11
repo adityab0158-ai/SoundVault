@@ -16,88 +16,69 @@ export interface SupabaseTrack {
   updated_at: string;
 }
 
-export interface SupabasePlaylist {
-  id: string;
-  user_id: string;
-  name: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface SupabasePlaylistItem {
-  id: string;
-  playlist_id: string;
-  track_id: string;
-  position: number;
-  added_at: string;
-}
-
-export interface SupabaseFavorite {
-  id: string;
-  user_id: string;
-  track_id: string;
-  created_at: string;
-}
-
-export interface SupabaseRecentlyPlayed {
-  id: string;
-  user_id: string;
-  track_id: string;
-  played_at: string;
-}
-
-export interface SupabasePreferences {
-  user_id: string;
-  theme: 'light' | 'dark';
-  sort_by: 'name' | 'dateAdded' | 'duration' | 'artist';
-  sort_order: 'asc' | 'desc';
-  view_mode: 'grid' | 'list';
-  updated_at: string;
-}
-
 export async function getCurrentUser() {
   const { data: { user } } = await supabase.auth.getUser();
+  console.log('[Supabase] getCurrentUser:', user?.id || 'null');
   return user;
 }
 
 export async function getCurrentUserId(): Promise<string | null> {
   const user = await getCurrentUser();
-  return user?.id || null;
+  const userId = user?.id || null;
+  console.log('[Supabase] getCurrentUserId:', userId);
+  return userId;
 }
 
 export async function signIn(email: string, password: string) {
+  console.log('[Supabase] Signing in:', email);
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
+  if (error) {
+    console.error('[Supabase] Sign in error:', error);
+  } else {
+    console.log('[Supabase] Sign in success, user:', data.user?.id);
+  }
   return { data, error };
 }
 
 export async function signUp(email: string, password: string) {
+  console.log('[Supabase] Signing up:', email);
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
   });
+  if (error) {
+    console.error('[Supabase] Sign up error:', error);
+  } else {
+    console.log('[Supabase] Sign up success, user:', data.user?.id);
+  }
   return { data, error };
 }
 
 export async function signOut() {
+  console.log('[Supabase] Signing out');
   const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error('[Supabase] Sign out error:', error);
+  }
   return { error };
 }
 
 export async function onAuthStateChange(callback: (user: any) => void) {
-  return supabase.auth.onAuthStateChange((_event, session) => {
+  return supabase.auth.onAuthStateChange((event, session) => {
+    console.log('[Supabase] Auth state change:', event, session?.user?.id || 'no user');
     callback(session?.user || null);
   });
 }
 
 export async function uploadAudioFile(
   userId: string,
-  file: File,
-  _onProgress?: (progress: number) => void
+  file: File
 ): Promise<{ path: string; url: string } | null> {
+  console.log('[Supabase] Uploading file:', file.name, 'for user:', userId);
+  
   const fileName = `${userId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
   
   const { data, error } = await supabase.storage
@@ -108,9 +89,11 @@ export async function uploadAudioFile(
     });
 
   if (error) {
-    console.error('Upload error:', error);
+    console.error('[Supabase] Upload error:', error);
     return null;
   }
+
+  console.log('[Supabase] Upload success, path:', data.path);
 
   const { data: urlData } = supabase.storage
     .from(STORAGE_BUCKET)
@@ -120,14 +103,18 @@ export async function uploadAudioFile(
 }
 
 export async function deleteAudioFile(storagePath: string): Promise<boolean> {
+  console.log('[Supabase] Deleting file:', storagePath);
+  
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)
     .remove([storagePath]);
 
   if (error) {
-    console.error('Delete file error:', error);
+    console.error('[Supabase] Delete file error:', error);
     return false;
   }
+  
+  console.log('[Supabase] File deleted successfully');
   return true;
 }
 
@@ -140,7 +127,13 @@ export function getAudioUrl(storagePath: string): string {
 
 export async function getTracks(): Promise<Track[]> {
   const userId = await getCurrentUserId();
-  if (!userId) return [];
+  
+  if (!userId) {
+    console.log('[Supabase] getTracks: No user ID, returning empty array');
+    return [];
+  }
+
+  console.log('[Supabase] getTracks: Fetching tracks for user:', userId);
 
   const { data, error } = await supabase
     .from('tracks')
@@ -149,36 +142,61 @@ export async function getTracks(): Promise<Track[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching tracks:', error);
+    console.error('[Supabase] getTracks error:', error);
     return [];
   }
+
+  console.log('[Supabase] getTracks: Found', data?.length || 0, 'tracks');
 
   return data.map(convertDbTrackToTrack);
 }
 
-export async function saveTrack(track: Track, storagePath?: string): Promise<void> {
+export async function saveTrack(track: Track, storagePath: string): Promise<boolean> {
   const userId = await getCurrentUserId();
-  if (!userId) return;
+  
+  if (!userId) {
+    console.error('[Supabase] saveTrack: No user ID');
+    return false;
+  }
 
-  const { error } = await supabase.from('tracks').insert({
-    id: track.id,
-    user_id: userId,
+  console.log('[Supabase] saveTrack: Inserting track:', track.id, 'for user:', userId);
+  console.log('[Supabase] saveTrack: Track data:', {
     title: track.title,
     artist: track.artist,
     album: track.album,
     duration: track.duration,
-    storage_path: storagePath,
-    artwork_url: track.artwork,
-    file_name: track.fileName,
-    file_size: track.fileSize || 0,
+    storagePath: storagePath,
   });
 
+  const { data, error, status } = await supabase
+    .from('tracks')
+    .insert({
+      id: track.id,
+      user_id: userId,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      duration: track.duration,
+      storage_path: storagePath,
+      artwork_url: track.artwork,
+      file_name: track.fileName,
+      file_size: track.fileSize || 0,
+    })
+    .select()
+    .single();
+
   if (error) {
-    console.error('Error saving track:', error);
+    console.error('[Supabase] saveTrack error:', error, 'Status:', status);
+    return false;
   }
+
+  console.log('[Supabase] saveTrack success, inserted track:', data?.id);
+  return true;
 }
 
 export async function deleteTrack(id: string, storagePath?: string): Promise<void> {
+  console.log('[Supabase] deleteTrack:', id, 'storagePath:', storagePath);
+  
   if (storagePath) {
     await deleteAudioFile(storagePath);
   }
@@ -189,7 +207,9 @@ export async function deleteTrack(id: string, storagePath?: string): Promise<voi
     .eq('id', id);
 
   if (error) {
-    console.error('Error deleting track:', error);
+    console.error('[Supabase] deleteTrack error:', error);
+  } else {
+    console.log('[Supabase] deleteTrack success');
   }
 }
 
@@ -197,19 +217,23 @@ export async function updateTrackFavorite(trackId: string, isFavorite: boolean):
   const userId = await getCurrentUserId();
   if (!userId) return;
 
+  console.log('[Supabase] updateTrackFavorite:', trackId, isFavorite ? 'adding' : 'removing');
+
   if (isFavorite) {
-    await supabase.from('favorites').upsert({
+    const { error } = await supabase.from('favorites').upsert({
       user_id: userId,
       track_id: trackId,
     }, {
       onConflict: 'user_id,track_id'
     });
+    if (error) console.error('[Supabase] Add favorite error:', error);
   } else {
-    await supabase
+    const { error } = await supabase
       .from('favorites')
       .delete()
       .eq('user_id', userId)
       .eq('track_id', trackId);
+    if (error) console.error('[Supabase] Remove favorite error:', error);
   }
 }
 
@@ -223,7 +247,7 @@ export async function getFavorites(): Promise<string[]> {
     .eq('user_id', userId);
 
   if (error) {
-    console.error('Error fetching favorites:', error);
+    console.error('[Supabase] getFavorites error:', error);
     return [];
   }
 
@@ -241,23 +265,25 @@ export async function getPlaylists(): Promise<Playlist[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching playlists:', error);
+    console.error('[Supabase] getPlaylists error:', error);
     return [];
   }
 
   const playlists = data.map(convertDbPlaylistToPlaylist);
 
-  const itemsData = await supabase
-    .from('playlist_items')
-    .select('playlist_id, track_id, position')
-    .in('playlist_id', data.map(p => p.id));
+  if (data.length > 0) {
+    const { data: itemsData } = await supabase
+      .from('playlist_items')
+      .select('playlist_id, track_id, position')
+      .in('playlist_id', data.map(p => p.id));
 
-  if (!itemsData.error && itemsData.data) {
-    for (const playlist of playlists) {
-      const items = itemsData.data
-        .filter(i => i.playlist_id === playlist.id)
-        .sort((a, b) => a.position - b.position);
-      playlist.trackIds = items.map(i => i.track_id);
+    if (!itemsData?.error && itemsData) {
+      for (const playlist of playlists) {
+        const items = itemsData
+          .filter(i => i.playlist_id === playlist.id)
+          .sort((a, b) => a.position - b.position);
+        playlist.trackIds = items.map(i => i.track_id);
+      }
     }
   }
 
@@ -278,7 +304,8 @@ export async function savePlaylist(playlist: Playlist): Promise<void> {
   });
 
   if (playlistError) {
-    console.error('Error saving playlist:', playlistError);
+    console.error('[Supabase] savePlaylist error:', playlistError);
+    return;
   }
 
   await supabase
@@ -307,7 +334,7 @@ export async function deletePlaylist(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) {
-    console.error('Error deleting playlist:', error);
+    console.error('[Supabase] deletePlaylist error:', error);
   }
 }
 
@@ -348,7 +375,7 @@ export async function getRecentlyPlayed(): Promise<RecentlyPlayed[]> {
     .limit(50);
 
   if (error) {
-    console.error('Error fetching recently played:', error);
+    console.error('[Supabase] getRecentlyPlayed error:', error);
     return [];
   }
 
@@ -438,10 +465,6 @@ export async function savePreferences(prefs: Preferences): Promise<void> {
   });
 }
 
-export async function incrementPlayCount(_trackId: string): Promise<void> {
-  // Not needed with Supabase - play count is tracked differently
-}
-
 export async function updateTrackMetadata(
   trackId: string,
   metadata: { title?: string; artist?: string; album?: string }
@@ -458,7 +481,7 @@ export async function updateTrackMetadata(
     .eq('id', trackId);
 
   if (error) {
-    console.error('Error updating track:', error);
+    console.error('[Supabase] updateTrackMetadata error:', error);
   }
 }
 
