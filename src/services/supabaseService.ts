@@ -17,9 +17,9 @@ export interface SupabaseTrack {
 }
 
 export async function getCurrentUser() {
-  const { data: { user } } = await supabase.auth.getUser();
-  console.log('[Supabase] getCurrentUser:', user?.id || 'null');
-  return user;
+  const { data: { session } } = await supabase.auth.getSession();
+  console.log('[Supabase] getCurrentUser:', session?.user?.id || 'null');
+  return session?.user || null;
 }
 
 export async function getCurrentUserId(): Promise<string | null> {
@@ -339,12 +339,16 @@ export async function deletePlaylist(id: string): Promise<void> {
 }
 
 export async function addToPlaylist(playlistId: string, trackId: string): Promise<void> {
-  const { data: existing } = await supabase
-    .from('playlist_items')
-    .select('position')
-    .eq('playlist_id', playlistId)
-    .order('position', { ascending: false })
-    .limit(1);
+  const { data: existing, error } = await supabase
+  .from('playlist_items')
+  .select('position')
+  .eq('playlist_id', playlistId)
+  .order('position', { ascending: false })
+  .limit(1);
+
+if (error) {
+  console.error(error);
+}
 
   const maxPosition = existing && existing.length > 0 ? existing[0].position : -1;
 

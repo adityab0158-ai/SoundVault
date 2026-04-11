@@ -231,9 +231,10 @@ CREATE POLICY "Users can update their own preferences"
 -- STORAGE BUCKET
 -- =============================================
 
--- Create audio files bucket (run in Supabase dashboard or use this)
--- INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
--- VALUES ('audio-files', 'audio-files', false, NULL, ARRAY['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/x-m4a']);
+-- Create audio files bucket (MUST be public for audio playback)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('audio-files', 'audio-files', true, NULL, ARRAY['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/x-m4a'])
+ON CONFLICT (id) DO UPDATE SET public = true;
 
 -- Storage RLS policies for audio files
 -- Note: These policies reference the bucket name 'audio-files'
@@ -245,12 +246,10 @@ CREATE POLICY "Users can upload their own audio files"
     AND auth.uid()::text = (storage.foldername(name))[1]
   );
 
-CREATE POLICY "Users can view their own audio files"
+-- Public read access for audio files (required for playback)
+CREATE POLICY "Public audio files are downloadable"
   ON storage.objects FOR SELECT
-  USING (
-    bucket_id = 'audio-files'
-    AND auth.uid()::text = (storage.foldername(name))[1]
-  );
+  USING (bucket_id = 'audio-files');
 
 CREATE POLICY "Users can update their own audio files"
   ON storage.objects FOR UPDATE

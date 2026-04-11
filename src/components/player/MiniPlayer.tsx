@@ -12,6 +12,7 @@ export function MiniPlayer({ onExpand, onOpenQueue }: MiniPlayerProps) {
   const { 
     currentTrack, 
     isPlaying, 
+    isAutoPlay,
     togglePlay, 
     nextTrack, 
     previousTrack, 
@@ -79,6 +80,10 @@ export function MiniPlayer({ onExpand, onOpenQueue }: MiniPlayerProps) {
           <span className={styles.time}>
             {formatDuration(currentTime)} / {formatDuration(duration)}
           </span>
+          
+          {isAutoPlay && (
+            <span className={styles.autoPlayIndicator} title="Auto-play On">AP</span>
+          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
-import { Plus, Grid, List, ArrowUpDown, Upload } from 'lucide-react';
+import { Plus, Grid, List, ArrowUpDown, Upload, Shuffle, Play, Pause } from 'lucide-react';
 import { useStore } from '../../stores/appStore';
 import { TrackCard } from './TrackCard';
 import { TrackRow } from './TrackRow';
@@ -15,6 +15,8 @@ export function LibraryView() {
     setViewMode,
     addTrack,
     playTrack,
+    playQueue,
+    shuffleAll,
     currentTrack,
     isPlaying,
     searchQuery,
@@ -196,6 +198,27 @@ export function LibraryView() {
               <List size={18} />
             </button>
           </div>
+          
+          {tracks.length > 0 && (
+            <>
+              <button 
+                className={styles.addBtn} 
+                onClick={() => playQueue(filteredAndSortedTracks, 0)}
+                style={{ backgroundColor: 'var(--primary)', marginRight: '8px' }}
+              >
+                {isPlaying && currentTrack ? <Pause size={20} /> : <Play size={20} />}
+                <span>Play All</span>
+              </button>
+              
+              <button 
+                className={styles.addBtn} 
+                onClick={shuffleAll}
+              >
+                <Shuffle size={20} />
+                <span>Shuffle</span>
+              </button>
+            </>
+          )}
           
           <button className={styles.addBtn} onClick={() => fileInputRef.current?.click()}>
             <Plus size={20} />

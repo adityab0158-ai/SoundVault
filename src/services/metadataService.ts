@@ -1,11 +1,10 @@
-import { parseFile } from 'music-metadata';
+import { parseBlob } from 'music-metadata';
 import { v4 as uuidv4 } from 'uuid';
 import type { Track } from '../types';
 
 export async function extractMetadata(file: File): Promise<Partial<Track>> {
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    const metadata = await parseFile(arrayBuffer as any);
+    const metadata = await parseBlob(file);
     
     let artwork: string | null = null;
     if (metadata.common.picture && metadata.common.picture.length > 0) {

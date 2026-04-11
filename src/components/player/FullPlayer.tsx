@@ -18,6 +18,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
   const {
     currentTrack,
     isPlaying,
+    isAutoPlay,
     togglePlay,
     nextTrack,
     previousTrack,
@@ -32,6 +33,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
     setRepeatMode,
     isShuffled,
     toggleShuffle,
+    toggleAutoPlay,
     playbackSpeed,
     setPlaybackSpeed,
     toggleFavorite,
@@ -166,8 +168,17 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
             <button 
               className={`${styles.controlBtn} ${repeatMode !== 'none' ? styles.active : ''}`}
               onClick={handleRepeatCycle}
+              title={`Repeat: ${repeatMode}`}
             >
               {repeatMode === 'one' ? <Repeat1 size={20} /> : <Repeat size={20} />}
+            </button>
+            
+            <button 
+              className={`${styles.controlBtn} ${isAutoPlay ? styles.active : ''}`}
+              onClick={toggleAutoPlay}
+              title={`Auto-play: ${isAutoPlay ? 'On' : 'Off'}`}
+            >
+              <span style={{ fontSize: '10px', fontWeight: 'bold' }}>AP</span>
             </button>
           </div>
           

@@ -33,6 +33,7 @@ interface AppState {
   queue: Track[];
   queueIndex: number;
   isPlaying: boolean;
+  isAutoPlay: boolean;
   currentTime: number;
   duration: number;
   volume: number;
@@ -73,6 +74,8 @@ interface AppState {
   toggleMute: () => void;
   setRepeatMode: (mode: RepeatMode) => void;
   toggleShuffle: () => void;
+  toggleAutoPlay: () => void;
+  shuffleAll: () => Promise<void>;
   setPlaybackSpeed: (speed: PlaybackSpeed) => void;
   
   setTheme: (theme: 'light' | 'dark') => void;
@@ -113,6 +116,7 @@ export const useStore = create<AppState>((set, get) => ({
   queue: [],
   queueIndex: -1,
   isPlaying: false,
+  isAutoPlay: true,
   currentTime: 0,
   duration: 0,
   volume: 0.7,
@@ -451,15 +455,21 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
   nextTrack: () => {
-    const { queue, queueIndex, repeatMode, isShuffled } = get();
+    const { queue, queueIndex, repeatMode, isShuffled, isAutoPlay } = get();
     if (queue.length === 0) return;
     
     let nextIndex: number;
     
     if (isShuffled) {
-      nextIndex = Math.floor(Math.random() * queue.length);
+      do {
+        nextIndex = Math.floor(Math.random() * queue.length);
+      } while (queue.length > 1 && nextIndex === queueIndex);
     } else if (queueIndex >= queue.length - 1) {
-      nextIndex = repeatMode === 'all' ? 0 : -1;
+      if (repeatMode === 'all' || isAutoPlay) {
+        nextIndex = 0;
+      } else {
+        nextIndex = -1;
+      }
     } else {
       nextIndex = queueIndex + 1;
     }
@@ -471,6 +481,18 @@ export const useStore = create<AppState>((set, get) => ({
       set({ isPlaying: false });
     }
   },
+  
+  shuffleAll: async () => {
+    const { tracks } = get();
+    if (tracks.length === 0) return;
+    
+    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    
+    await get().playQueue(shuffled, 0);
+    set({ isShuffled: true, isAutoPlay: true });
+  },
+  
+  toggleAutoPlay: () => set((state) => ({ isAutoPlay: !state.isAutoPlay })),
   
   previousTrack: () => {
     const { queue, queueIndex, currentTime } = get();
@@ -582,9 +604,8 @@ async function createLocalTrack(file: File): Promise<Track> {
   let album = 'Unknown Album';
   
   try {
-    const { parseFile } = await import('music-metadata');
-    const arrayBuffer = await file.arrayBuffer();
-    const metadata = await parseFile(arrayBuffer as any);
+    const { parseBlob } = await import('music-metadata');
+    const metadata = await parseBlob(file);
     
     title = metadata.common.title || title;
     artist = metadata.common.artist || artist;
