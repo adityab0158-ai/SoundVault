@@ -1,6 +1,8 @@
 import { supabase, STORAGE_BUCKET } from '../lib/supabase';
 import type { Track, Playlist, RecentlyPlayed, Preferences } from '../types';
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
 export interface SupabaseTrack {
   id: string;
   user_id: string;
@@ -77,30 +79,50 @@ export async function uploadAudioFile(
   userId: string,
   file: File
 ): Promise<{ path: string; url: string } | null> {
-  console.log('[Supabase] Uploading file:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
+  const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+  console.log('[Supabase] Uploading file:', file.name, 'Size:', fileSizeMB, 'MB');
   
   const fileName = `${userId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
   
-  const { data, error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(fileName, file, {
-      cacheControl: '3600',
-      upsert: false,
-      duplex: 'half',
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    
+    if (!token) {
+      console.error('[Supabase] No auth token available');
+      return null;
+    }
+    
+    const uploadUrl = `${SUPABASE_URL}/storage/v1/object/audio-files/${fileName}`;
+    
+    console.log('[Supabase] Starting direct upload...');
+    
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'x-upsert': 'false',
+        'Content-Type': file.type || 'audio/mpeg',
+      },
+      body: file,
     });
-
-  if (error) {
-    console.error('[Supabase] Upload error:', error);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Supabase] Upload failed:', response.status, errorText);
+      return null;
+    }
+    
+    const result = await response.json();
+    console.log('[Supabase] Upload success:', result);
+    
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/audio-files/${fileName}`;
+    
+    return { path: fileName, url: publicUrl };
+  } catch (err) {
+    console.error('[Supabase] Upload exception:', err);
     return null;
   }
-
-  console.log('[Supabase] Upload success, path:', data.path);
-
-  const { data: urlData } = supabase.storage
-    .from(STORAGE_BUCKET)
-    .getPublicUrl(data.path);
-
-  return { path: data.path, url: urlData.publicUrl };
 }
 
 export async function deleteAudioFile(storagePath: string): Promise<boolean> {
