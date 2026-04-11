@@ -277,7 +277,7 @@ export async function getPlaylists(): Promise<Playlist[]> {
       .select('playlist_id, track_id, position')
       .in('playlist_id', data.map(p => p.id));
 
-    if (!itemsData?.error && itemsData) {
+    if (itemsData) {
       for (const playlist of playlists) {
         const items = itemsData
           .filter(i => i.playlist_id === playlist.id)

@@ -219,7 +219,7 @@ export const useStore = create<AppState>((set, get) => ({
   setSelectedPlaylistId: (id) => set({ selectedPlaylistId: id, currentView: id ? 'playlist-detail' : 'playlists' }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   
-  addTrack: async (file, onProgress) => {
+  addTrack: async (file, _onProgress) => {
     const track = await createLocalTrack(file);
     
     const user = get().user;
@@ -231,7 +231,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ isLoading: true });
     
     try {
-      const uploadResult = await storage.uploadAudioFile(user.id, file, onProgress);
+      const uploadResult = await storage.uploadAudioFile(user.id, file);
       
       if (!uploadResult) {
         get().addToast('error', 'Failed to upload file');
