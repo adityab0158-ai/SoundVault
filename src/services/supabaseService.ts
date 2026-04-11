@@ -77,7 +77,7 @@ export async function uploadAudioFile(
   userId: string,
   file: File
 ): Promise<{ path: string; url: string } | null> {
-  console.log('[Supabase] Uploading file:', file.name, 'for user:', userId);
+  console.log('[Supabase] Uploading file:', file.name, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
   
   const fileName = `${userId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
   
@@ -86,6 +86,7 @@ export async function uploadAudioFile(
     .upload(fileName, file, {
       cacheControl: '3600',
       upsert: false,
+      duplex: 'half',
     });
 
   if (error) {

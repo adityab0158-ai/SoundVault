@@ -232,13 +232,20 @@ export const useStore = create<AppState>((set, get) => ({
       return;
     }
     
+    const fileSizeMB = (file.size / 1024 / 1024).toFixed(1);
+    const isLargeFile = file.size > 50 * 1024 * 1024;
+    
     set({ isLoading: true });
+    
+    if (isLargeFile) {
+      get().addToast('info', `Uploading ${fileSizeMB}MB file... this may take a while`);
+    }
     
     try {
       const uploadResult = await storage.uploadAudioFile(user.id, file);
       
       if (!uploadResult) {
-        get().addToast('error', 'Failed to upload file');
+        get().addToast('error', 'Failed to upload file. File may be too large.');
         set({ isLoading: false });
         return;
       }
@@ -260,7 +267,7 @@ export const useStore = create<AppState>((set, get) => ({
       get().addToast('success', `Added "${track.title}" to library`);
     } catch (error) {
       console.error('Failed to add track:', error);
-      get().addToast('error', 'Failed to add track');
+      get().addToast('error', 'Failed to add track. Try a smaller file or check your connection.');
       set({ isLoading: false });
     }
   },

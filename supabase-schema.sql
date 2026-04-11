@@ -232,9 +232,13 @@ CREATE POLICY "Users can update their own preferences"
 -- =============================================
 
 -- Create audio files bucket (MUST be public for audio playback)
+-- file_size_limit is set to 500MB (524288000 bytes) for large audio files
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('audio-files', 'audio-files', true, NULL, ARRAY['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/x-m4a'])
-ON CONFLICT (id) DO UPDATE SET public = true;
+VALUES ('audio-files', 'audio-files', true, 524288000, ARRAY['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/x-m4a'])
+ON CONFLICT (id) DO UPDATE SET 
+  public = true,
+  file_size_limit = 524288000,
+  allowed_mime_types = ARRAY['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/x-m4a'];
 
 -- Storage RLS policies for audio files
 -- Note: These policies reference the bucket name 'audio-files'
