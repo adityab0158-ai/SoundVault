@@ -404,10 +404,13 @@ export const useStore = create<AppState>((set, get) => ({
       
       await storage.addToRecentlyPlayed(track.id);
       
+      const allTracks = get().tracks;
+      const trackIndex = allTracks.findIndex(t => t.id === track.id);
+      
       set({
         currentTrack: track,
-        queue: [track],
-        queueIndex: 0,
+        queue: allTracks,
+        queueIndex: trackIndex >= 0 ? trackIndex : 0,
         isPlaying: true,
         currentTime: 0,
         duration: audioService.duration,
@@ -440,10 +443,13 @@ export const useStore = create<AppState>((set, get) => ({
       
       await storage.addToRecentlyPlayed(track.id);
       
+      const allTracks = get().tracks;
+      const actualIndex = allTracks.findIndex(t => t.id === track.id);
+      
       set({
         currentTrack: track,
-        queue: tracks,
-        queueIndex: startIndex,
+        queue: allTracks,
+        queueIndex: actualIndex >= 0 ? actualIndex : startIndex,
         isPlaying: true,
         currentTime: 0,
         duration: audioService.duration,
@@ -507,10 +513,37 @@ export const useStore = create<AppState>((set, get) => ({
     const { tracks } = get();
     if (tracks.length === 0) return;
     
-    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    const shuffledTracks = [...tracks].sort(() => Math.random() - 0.5);
+    const shuffledIndex = 0;
     
-    await get().playQueue(shuffled, 0);
-    set({ isShuffled: true, isAutoPlay: true });
+    const track = shuffledTracks[shuffledIndex];
+    if (!track.publicUrl && !track.storagePath) {
+      get().addToast('error', 'Track not available. Please re-upload.');
+      return;
+    }
+    
+    try {
+      await audioService.loadTrack(track);
+      audioService.play();
+      
+      await storage.addToRecentlyPlayed(track.id);
+      
+      set({
+        currentTrack: track,
+        queue: tracks,
+        queueIndex: shuffledIndex,
+        isPlaying: true,
+        currentTime: 0,
+        duration: audioService.duration,
+        isShuffled: true,
+        isAutoPlay: true,
+      });
+      
+      get().addToast('success', 'Shuffle play started');
+    } catch (error) {
+      console.error('Failed to shuffle play:', error);
+      get().addToast('error', 'Failed to start shuffle play');
+    }
   },
   
   toggleAutoPlay: () => set((state) => ({ isAutoPlay: !state.isAutoPlay })),
