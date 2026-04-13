@@ -422,9 +422,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
   playQueue: async (tracks, startIndex = 0) => {
+    console.log('[Store] playQueue called:', { tracksLength: tracks.length, startIndex });
+    
     if (tracks.length === 0) return;
     
     const track = tracks[startIndex];
+    console.log('[Store] Playing track:', track?.title, track?.publicUrl);
+    
     if (!track.publicUrl && !track.storagePath) {
       get().addToast('error', 'Track not available. Please re-upload.');
       return;
@@ -445,6 +449,8 @@ export const useStore = create<AppState>((set, get) => ({
         duration: audioService.duration,
       });
       
+      console.log('[Store] Track loaded, isPlaying should be true');
+      
       const recentlyPlayed = await storage.getRecentlyPlayed();
       set({ recentlyPlayed });
     } catch (error) {
@@ -463,6 +469,8 @@ export const useStore = create<AppState>((set, get) => ({
   
   nextTrack: () => {
     const { queue, queueIndex, repeatMode, isShuffled, isAutoPlay } = get();
+    console.log('[Store] nextTrack called:', { queueLength: queue.length, queueIndex, repeatMode, isShuffled, isAutoPlay });
+    
     if (queue.length === 0) return;
     
     let nextIndex: number;
@@ -471,19 +479,25 @@ export const useStore = create<AppState>((set, get) => ({
       do {
         nextIndex = Math.floor(Math.random() * queue.length);
       } while (queue.length > 1 && nextIndex === queueIndex);
+      console.log('[Store] Shuffle nextIndex:', nextIndex);
     } else if (queueIndex >= queue.length - 1) {
       if (repeatMode === 'all' || isAutoPlay) {
         nextIndex = 0;
+        console.log('[Store] Loop to beginning, nextIndex:', nextIndex);
       } else {
         nextIndex = -1;
+        console.log('[Store] End of queue, stopping');
       }
     } else {
       nextIndex = queueIndex + 1;
+      console.log('[Store] Normal nextIndex:', nextIndex);
     }
     
     if (nextIndex >= 0) {
+      console.log('[Store] Playing next track, index:', nextIndex);
       get().playQueue(queue, nextIndex);
     } else {
+      console.log('[Store] No more tracks, pausing');
       audioService.pause();
       set({ isPlaying: false });
     }
@@ -653,6 +667,7 @@ audioService.onTimeUpdate = () => {
 };
 
 audioService.onEnded = () => {
+  console.log('[Audio] Track ended, calling nextTrack');
   const { repeatMode } = useStore.getState();
   if (repeatMode === 'one') {
     useStore.getState().seek(0);

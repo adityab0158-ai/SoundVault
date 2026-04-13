@@ -62,10 +62,12 @@ class AudioService {
   }
 
   play(): Promise<void> {
+    console.log('[AudioService] play() called');
     return this.audio.play();
   }
 
   pause(): void {
+    console.log('[AudioService] pause() called');
     this.audio.pause();
   }
 
